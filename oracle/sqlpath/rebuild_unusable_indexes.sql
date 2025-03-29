@@ -1,20 +1,26 @@
 /*
    rebuild_unusable_indexes.sql
+
+   Parameters: none
    
-   Rebuilds indexes owned by current user for the current schema
+   Rebuilds indexes that are both:
+      * owned by current schema i.e., sys_context('USERENV','CURRENT_SCHEMA')
+      * available to the session user, i.e., all_indexes
    
-   Enable serveroutput for feedback
+   Note:
+      The owner of the *table* the index is upon is not relevant. Typically, the
+      table and index owner are the same, but this is not required.
+
+   Optional: Enable serveroutput for feedback
    
    Example:
-      Copy into a client's SQLPATH location
-      Execute without pathing
-      (optional) sql> @whoami
-      (optional) sql> @setschema affected_schema_name
+      (optional) sql> @setschema indexOwningSchemaName
       sql> @rebuild_unusable_indexes
 
    MIT License
 
-   Copyright (c) 2024 Team O'Neill Projects and Michael O'Neill
+   Copyright (c) 2024-2025 Team O'Neill Projects and Michael O'Neill
+   https://teamoneill.org
    
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal

@@ -1,20 +1,23 @@
 /*
    enable_validate_constraints.sql
+
+   Parameters: none
    
-   Enables and validates constraints owned by current user for the current schema
+   Purpose:
+      Enables and validates constraints that are both
+      * owned by the current schema i.e., sys_context('USERENV','CURRENT_SCHEMA')
+      * available to the session user i.e., all_constraints.
    
-   Requires whoami.sql
+  Tested: 19c and 23ai servers and clients (should work with any)
    
    Example:
-      Copy into a client's SQLPATH location
-      Execute without pathing
-      (optional) sql> @whoami
-      (optional) sql> @setschema affected_schema_name
+     (optional) sql> @setschema tableOwningSchemaName
       sql> @enable_validate_constraints
 
    MIT License
 
-   Copyright (c) 2024 Team O'Neill Projects and Michael O'Neill
+   Copyright (c) 2024-2025 Team O'Neill Projects and Michael O'Neill
+   https://teamoneill.org
    
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal

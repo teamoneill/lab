@@ -1,19 +1,24 @@
 /*
-   setedition.sql
+   setcontainer.sql
 
    Parameters:
-      1. editionName (required)
+      1. containerName (required)
    
    Purpose:
       Spares session user some typing or enhances logging with whoami feedback
-      when manipulating the session's edition.
+      when manipulating the session's container.
+   
+   Requires: whoami.sql (same bundle)
+
+   Tested: 19c and 23ai container database servers
    
    Example:
-      sql> @setedition editionName
+      sql> @setcontainer containerName
 
    MIT License
 
    Copyright (c) 2024-2025 Team O'Neill Projects and Michael O'Neill
+   https://teamoneill.org
    
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -36,7 +41,7 @@
 
 set termout off
 
-alter session set edition = &1 ;
+alter session set container = &1 ;
 
 set termout on
 

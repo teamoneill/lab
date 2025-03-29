@@ -1,18 +1,20 @@
 /*
    setschema.sql
+
+   Parameters:
+      1. schemaName (required)
    
-   Spares user some typing and automatically provides feedback.
-   
-   Requires whoami.sql
+   Purpose:
+      Spares session user some typing or enhances logging with whoami feedback
+      when manipulating the session's current schema.
    
    Example:
-      Copy into a client's SQLPATH location
-      Execute without pathing
-      sql> @setschema
+      sql> @setschema schemaName
 
    MIT License
 
-   Copyright (c) 2024 Team O'Neill Projects and Michael O'Neill
+   Copyright (c) 2024-2025 Team O'Neill Projects and Michael O'Neill
+   https://teamoneill.org
    
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
