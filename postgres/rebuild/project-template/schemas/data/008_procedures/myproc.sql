@@ -1,0 +1,3 @@
+-- CREATE PROCEDURE statements here
+-- If referencing other procedures, functions or views create a forward
+-- declaration for that object under schema_name/forward_source

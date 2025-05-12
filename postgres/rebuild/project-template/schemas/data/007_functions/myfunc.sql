@@ -1,0 +1,3 @@
+-- CREATE FUNCTION statements here
+-- If referencing other functions, procedures or views create a forward
+-- declaration for that object under appropriate schema_name.forward_source
