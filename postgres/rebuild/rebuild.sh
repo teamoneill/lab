@@ -13,7 +13,7 @@ display_fatal_error() {
 }
 
 display_version() {
-    echo "Team O'Neill Projects - Rebuild (pre-release)"
+    echo "Team O'Neill Projects - Postgres Schema Rebuild (pre-release)"
 }
 
 display_copyright() {
@@ -209,7 +209,7 @@ for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $pro
     if [ "$schema_lower_case" == "public" ]; then
         echo "-- intentionally skipping public schema" >> $rebuild_sql
     else
-        echo "DROP SCHEMA $(basename $schema) CASCADE;" >> $rebuild_sql
+        echo "DROP SCHEMA IF EXISTS $(basename $schema) CASCADE;" >> $rebuild_sql
     fi
 done 2>/dev/null
 echo "" >> $rebuild_sql
@@ -225,12 +225,25 @@ for sql_script in $(find $project_folder/database -type f -name "*.sql" | sort -
 done 2>/dev/null
 echo "" >> $rebuild_sql
 
+step_label="CREATE SCHEMAS (if explicit scripting to create them is missing)"
+display_step_header >> $rebuild_sql
+echo "INFO: Appending $step_label"
+for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
+    schema_lower_case=$( tr '[:upper:]' '[:lower:]' <<<"$(basename $schema)" )
+    if [ "$schema_lower_case" == "public" ]; then
+        echo "-- intentionally skipping public schema" >> $rebuild_sql
+    else
+        echo "CREATE SCHEMA IF NOT EXISTS $(basename $schema);" >> $rebuild_sql
+    fi
+done 2>/dev/null
+echo "" >> $rebuild_sql
+
 step_label="SCHEMAS FORWARD SOURCE"
 display_step_header >> $rebuild_sql
 echo "INFO: Appending $step_label"
 for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
     for sql_script in $(find $schema/forward_source -type f -name "*.sql" | sort -n); do
-        echo "set search_path = \"$(basename $schema)\",\"\$user\";" >> $rebuild_sql
+        echo "set search_path = \"$(basename $schema)\";" >> $rebuild_sql
         echo "-- $sql_script" >> $rebuild_sql
         echo "-- $sql_script" >> $rebuild_sql
         cat $sql_script >> $rebuild_sql
@@ -246,7 +259,7 @@ display_step_header >> $rebuild_sql
 echo "INFO: Appending $step_label"
 for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
     for sql_script in $(find $schema/source -type f -name "*.sql" | sort -n); do
-        echo "set search_path = \"$(basename $schema)\",\"\$user\";" >> $rebuild_sql
+        echo "set search_path = \"$(basename $schema)\";" >> $rebuild_sql
         echo "-- $sql_script" >> $rebuild_sql
         cat $sql_script >> $rebuild_sql
         echo "" >> $rebuild_sql
