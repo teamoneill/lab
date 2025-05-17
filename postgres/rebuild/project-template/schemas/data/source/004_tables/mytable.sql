@@ -1,6 +1,0 @@
--- CREATE TABLE statement here
--- OK to include CHECK constraints in-line or as additional statement
--- NOT OK to include FOREIGN KEY constraint REFERENCES - use a later sequenced folder, e.g., 005_ref_constraints
--- OK to include COMMENT statements
--- OK to include just about anything as long as it depends only upon contents of this script
--- OK to include indexes

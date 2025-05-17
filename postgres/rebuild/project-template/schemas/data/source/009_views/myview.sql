@@ -1,3 +1,0 @@
--- CREATE VIEW statements here
--- references to same schema objects should not need a forward_source declaration (if folder name prefixing is sound)
--- references to other schema objects should have a schema_name.forward_source declaration

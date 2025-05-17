@@ -1,3 +1,0 @@
--- ALTER TABLE table-name ADD CONSTRAINT foreign keys
--- OK as as single or multiple statements
--- Best practice is to add a corresponding index here

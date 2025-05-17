@@ -1,2 +1,0 @@
--- GRANT statements here
--- while grants could be made in other/earlier files they can also be made here
