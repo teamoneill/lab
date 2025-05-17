@@ -1,10 +1,10 @@
 # instance folder
 
-This folder is intentionally not a member of the rebuild processing.
+This folder is intentionally not a member of the rebuild process.
 
-Can be used for capturing instance-level activity that cannot (or should not) be a member of the rebuild processing.
+Can be used for capturing instance-level activity that cannot (or should not) be a step of the rebuild.
 
-Typically the rebuild process is executed by the database owner, not a super user.
+Typically the rebuild process is executed by the product owner role.
 
 Use cases:
 

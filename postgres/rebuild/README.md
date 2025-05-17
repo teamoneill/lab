@@ -1,7 +1,7 @@
 [Team O'Neill Projects](http://teamoneill.org)
 # [Postgres Database Project Rebuild](https://github.com/teamoneill/lab/tree/main/postgres/rebuild)
 
-**Version:** (pre-release)
+**Version:** 2025-10-17
 
 **Purpose:** While rapidly developing changes in a branch database, this package completely synchronizes the database with your project's source control sandbox.
 
@@ -43,7 +43,7 @@ To automatically execute generated rebuild SQL, valid conninfo is required.
 
 ### Example:
 ````
-$ rebuild.sh --source-folder=~/source/repos/myproject/database_src -output-folder=/tmp/top_rebuild --conninfo=postgresql://dbuser:mypwd@myhost:5432/mybranchdb
+$ rebuild.sh --source-folder=~/source/repos/myproject/database_src -output-folder=/tmp/top_rebuild --product-owner=thetableowningrole --conninfo=postgresql://dbuser:mypwd@myhost:5432/mybranchdb
 ````
 
 ## Parameters
@@ -55,8 +55,9 @@ $ rebuild.sh --source-folder=~/source/repos/myproject/database_src -output-folde
 | `--copyright`                   | Informational. Displays copyright and continues. |
 | `--license`                     | Informational. Displays license and continues. |
 | `--project-folder=`***{path}*** | Generate SQL input. The path to the database project folder. |
-| `--output-folder=`***{path}***  | Generate SQL output. The path to the folder where generated files will be created (and overwritten).|
-| `--conninfo=`***{uri}***        | Execution of the generated SQL is requested. {uri} is in the form of `postgresql://[user[:password]@][host][:port][/dbname][?param1=value1&param2=value2]`.  If uri value is ommitted, all PG* environment variables must be set. This connection should have sufficient privileges to all roles, schemas and system privileges to execute all the *.sql files of the project|
+| `--output-folder=`***{path}***  | Generate SQL output. The path to the folder where generated files will be created (and overwritten). This does not have to be under your project folder (probably shouldn't be). |
+| `--product-owner=`***{role}***  | The role that will own the objects created as part of the rebuild. |
+| `--conninfo=`***{uri}***        | Execution of the generated SQL is requested. {uri} is in the form of `postgresql://[user[:password]@][host][:port][/dbname][?param1=value1&param2=value2]`. |
 
 -------------------------------------------------------------------------------
 
@@ -73,32 +74,47 @@ This should have an expected structure. Review `project-template` folder as addi
   |    |-- {any folder structure}/{any filename}.sql                                            
   |-- schemas                  
   |    |-- {schema_name}
-  |    |    |-- forward_source
-  |    |    |    |-- {any folder structure}/{any filename}.sql  
-  |    |    |-- source
+  |    |    |-- special
+  |    |    |    |-- domains
+  |    |    |    |    |-- {any folder structure}/{any filename}.sql  
+  |    |    |    |-- types
+  |    |    |    |    |-- {any folder structure}/{any filename}.sql
+  |    |    |    |-- forward_declarations
+  |    |    |    |    |-- {any folder structure}/{any filename}.sql  
+  |    |    |-- general
   |    |    |    |-- {any folder structure}/{any filename}.sql              
   |    |-- ... (any number of {schema_name})              
   |-- breakdown_tasks           
   |    |-- {any folder structure}/{any filename}.sql
-  |-- output
+  |-- instance
 ````
 
-### Implicitly invoked by `build.sql` in this order:
-The package will process all *.sql files found under:
+### Rebuild processing occurs in this order for any *.sql files found:
+
 1. `setup_tasks` - Any custom administrative scripts to support the rebuild, e.g., logging, notifications
-1. `database` - Database-scope scripting, e.g., roles, users, schemas, system privilege grants, etc. Including CREATE SCHEMAs here is almost certainly necessary.
-1. `schemas`/{each_schema_name}/`forward_source` - All schemas' forward_source is processed before any schemas' source
-1. `schemas`/{each_schema_name}/`source` - Traditional per-object database source files
-1. `breakdown_tasks` - Any custom administrative scripts to support the rebuild, e.g., unit testing, continuous integration, etc.
+1. `database` - Database-scope scripting, e.g., creating schemas and maintining their associated privileges. Instance-scope configuration is outside the scope of the rebuild.
+1. `schemas`/{each_schema_name}/`special` - Folders with special handling (in this order)
+    1. `domains` - Processed before general scripting
+    1. `types` - Processed before general scripting
+    1. `forward_declarations` - All schemas' forward_declarations are processed before any schema's general processing (optional)
+1. `schemas`/{each_schema_name}/`general` - Very freeform and flexible, where most of the source contol body of work lives
+1. `breakdown_tasks` - Any custom administrative scripts to support the rebuild, e.g., unit testing, continuous integration, custom dml, etc.
+
+`instance` - Is not processed
+
 
 ### Notes:
-* Employ folder structure and folder/file naming prefixes to ensure any desired deterministic order of processing.
+
+* Employ folder structure and folder/file naming prefixes to ensure any desired deterministic order of processing. Recommendations:
+  * Create a folder structure that mimics your table inheritence structure (makes logical sense and may improve rebuild processing time)
+  * Avoid circular references between objects, same or cross-schema. Your only remedy is use of the special forward_declarations folder
+  * Do not include foreign key constraints in the general folder. Use the special ref_constraints folder
 * This package ***will not*** implicitly drop any roles or users.
 * However, this package ***will*** drop {each_schema_name} cascade. If this behavior is not compatible with your database project processes, this package is not for you.
 * Even when `schemas/public` folder exists, the `public` schema is neither ***implicitly*** created, dropped, nor any objects contained by it dropped. Use of `public` schema is discouraged. `schemas/public` *.sql files will be executed, however.
-* When removing roles, users, or schemas from your database project - manually drop them from the database(s) as necessary (or include logic to `setup_tasks`/`database`/`breakdown_tasks` to do so)
+* When adding or removing roles for your database project, use the instance folder to capture this logic. The rebuild process does not consider this folder. 
 * To support error-free processing of intra-schema referencing, all `schemas`/{schema_name}/`forward_source` *.sql files are processed prior to any other schemas' *.sql files.
-* Recommended: for schema `forward_source` and `source` *.sql files, omit schema in the definitions. It is not necessary or desirable to include schema in the definitions.
+
 * Keep in mind that this package is very much a [GIGO](https://www.urbandictionary.com/define.php?term=gigo) architecture. Especially while you are experimenting, ensure that you are not using this in a vital database.
 * While data can easily be included, anything significant is going to slow down the rebuild cycle execution. Either create conditional logic for large amounts of DML only in certain circumstances or handle in a seperate fashion from rebuild.
 
@@ -107,8 +123,4 @@ The package will process all *.sql files found under:
 ## Output
 `--output-folder`
 
-| <div style="width:250px">File</div> | Purpose |
-| -- | -- |
-| `rebuild.sql` | The generated script. When executed, implicitly or explicitly, this script synchronizes the database with project-folder. When `--connect-url` parameter is provided, executed automatically |
-| `rebuild.log` | The logging of the execution of `rebuild.sql` (if executed) |
-| `rebuild.log.error` | Any execution NOTICEs, WARNINGs, or ERRORs |
+The rebuild.log file can be helpful for troubleshooting. The various generated *.sql files are not intended for individual manual execution.
