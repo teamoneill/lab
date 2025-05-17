@@ -13,7 +13,7 @@ display_fatal_error() {
 }
 
 display_version() {
-    echo "Team O'Neill Projects - Postgres Schema Rebuild (pre-release)"
+    echo "Team O'Neill Projects - Postgres Schema Rebuild (2025-10-17)"
 }
 
 display_copyright() {
@@ -65,12 +65,17 @@ Parameters:
 
   --project-folder={path}
       Location of database project source code. See README for guidance on structure expected.
+      Required for output.
 
   --output-folder={path}
-      Location of generated SQL.
+      Location of generated SQL. Required for output.
+
+  --product-owner={role}
+      The role that owns the objects of the rebuild. Required for output.
 
   --conninfo={uri}
-      Execution of generated SQL is requested. 
+      Execution of generated SQL is requested.
+      The executing role must have SET privilege to the product-owner 
 
 See README for more detailed guidance.
 "
@@ -95,6 +100,7 @@ output_requested="false"
 execution_requested="false"
 project_folder=""
 output_folder=""
+product_owner=""
 conninfo=""
 
 # parameter processing
@@ -130,6 +136,11 @@ for i in "$@"; do
         output_requested="true"
         shift
         ;;
+        --product-owner=*)
+        product_owner="${i#*=}"
+        output_requested="true"
+        shift
+        ;;
         --conninfo=*)
         conninfo="${i#*=}"
         output_requested="true"
@@ -161,165 +172,254 @@ fi
 
 if [ "$output_requested" = "true" ]; then
     # check if required source folder parameter is missing
-    if [[ -n "$project_folder" && -n "$output_folder" ]]; then
+    if [[ -n "$project_folder" && -n "$output_folder" && -n "$product_owner" ]]; then
 
         #TODO check that source folder exists and has expected structure
         #TODO check that output folder exists
 
         echo "INFO: Input - $project_folder"
         echo "INFO: Output - $output_folder"
+        echo "INFO: Product Owner - $product_owner"
     else
-        display_fatal_error "folder parameter(s) missing"
+        display_fatal_error "required parameter(s) for output missing"
         display_fatal_error_default_action
         exit 1
     fi
 fi
 
+echo "REQUESTED: Generate rebuild SQL"
+
 # output baseline variables
+setup_tasks=$output_folder/setup_tasks.sql
+drop_schemas=$output_folder/drop_schemas.sql
+database_scope=$output_folder/database_scope.sql
+special_initial_schema=$output_folder/special_initial_schema.sql
+general_schema=$output_folder/general_schema.sql
+special_final_schema=$output_folder/special_final_schema.sql
+breakdown_tasks=$output_folder/breakdown_tasks.sql
 rebuild_sql=$output_folder/rebuild.sql
-rebuild_log=$output_folder/rebuild.log
-rebuild_error=$rebuild_log.error
+todo=$output_folder/todo.txt
+log=$output_folder/rebuild.log
 
 # initialize output files
-touch $rebuild_sql >/dev/null 2>&1
-echo "--$log_date" > $rebuild_sql
-touch $rebuild_log >/dev/null 2>&1
-echo "$log_date" > $rebuild_log
-touch $rebuild_error >/dev/null 2>&1
-echo "$log_date" > $rebuild_error
-
-echo "INFO: Generating rebuild SQL - $rebuild_sql"
+echo "" > $setup_tasks
+echo "" > $drop_schemas
+echo "" > $database_scope
+echo "" > $special_initial_schema
+echo "" > $general_schema
+echo "" > $special_final_schema
+echo "" > $breakdown_tasks
+echo "" > $breakdown_tasks
+echo "" > $todo
+echo "" > $log
 
 step_label="SETUP TASKS"
-display_step_header >> $rebuild_sql
-echo "INFO: Appending $step_label"
+display_step_header >> $setup_tasks
+echo "INFO: Generating $step_label - $setup_tasks"
+echo "SET client_min_messages TO ERROR;" >> $setup_tasks
+echo "SET ROLE $product_owner;" >>$breakdown_tasks 
 for sql_script in $(find $project_folder/setup_tasks/*.sql -type f | sort -n); do
-    echo "-- $(basename $sql_script)" >> $rebuild_sql
-    cat $sql_script >> $rebuild_sql
-    echo "" >> $rebuild_sql
-    echo "" >> $rebuild_sql
+    echo "\\echo $sql_script" >> $setup_tasks
+    cat $sql_script >> $setup_tasks
+    echo "" >> $setup_tasks
 done 2>/dev/null
-echo "" >> $rebuild_sql
-
-step_label="DROP SCHEMAS"
-display_step_header >> $rebuild_sql
-echo "INFO: Appending $step_label"
-for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
-    schema_lower_case=$( tr '[:upper:]' '[:lower:]' <<<"$(basename $schema)" )
-    if [ "$schema_lower_case" == "public" ]; then
-        echo "-- intentionally skipping public schema" >> $rebuild_sql
-    else
-        echo "DROP SCHEMA IF EXISTS $(basename $schema) CASCADE;" >> $rebuild_sql
-    fi
-done 2>/dev/null
-echo "" >> $rebuild_sql
 
 step_label="DATABASE SCOPE"
-display_step_header >> $rebuild_sql
-echo "INFO: Appending $step_label"
-for sql_script in $(find $project_folder/database -type f -name "*.sql" | sort -n); do
-    echo "-- $sql_script" >> $rebuild_sql
-    cat $sql_script >> $rebuild_sql
-    echo "" >> $rebuild_sql
-    echo "" >> $rebuild_sql
-done 2>/dev/null
-echo "" >> $rebuild_sql
-
-step_label="CREATE SCHEMAS (if explicit scripting to create them is missing)"
-display_step_header >> $rebuild_sql
-echo "INFO: Appending $step_label"
+display_step_header >> $database_scope
+echo "INFO: Generating $step_label - $database_scope"
+echo "SET client_min_messages TO ERROR;" >> $database_scope
+echo "SET ROLE $product_owner;" >>$breakdown_tasks 
+echo "-- explicitly dropping schemas" >> $database_scope
 for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
     schema_lower_case=$( tr '[:upper:]' '[:lower:]' <<<"$(basename $schema)" )
     if [ "$schema_lower_case" == "public" ]; then
-        echo "-- intentionally skipping public schema" >> $rebuild_sql
+        echo "-- intentionally skipping public schema" >> $database_scope
+        echo "-- any errors resulting from creating public schema objects must be resolved manually" >>$database_scope
     else
-        echo "CREATE SCHEMA IF NOT EXISTS $(basename $schema);" >> $rebuild_sql
+        echo "DROP SCHEMA IF EXISTS $(basename $schema) CASCADE;" >> $database_scope
     fi
 done 2>/dev/null
-echo "" >> $rebuild_sql
-
-step_label="SCHEMAS FORWARD SOURCE"
-display_step_header >> $rebuild_sql
-echo "INFO: Appending $step_label"
-for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
-    for sql_script in $(find $schema/forward_source -type f -name "*.sql" | sort -n); do
-        echo "set search_path = \"$(basename $schema)\";" >> $rebuild_sql
-        echo "-- $sql_script" >> $rebuild_sql
-        echo "-- $sql_script" >> $rebuild_sql
-        cat $sql_script >> $rebuild_sql
-        echo "" >> $rebuild_sql
-        echo "" >> $rebuild_sql
-    done 2>/dev/null
-    echo "" >> $rebuild_sql
+echo "-- processing database folder" >> $database_scope
+for sql_script in $(find $project_folder/database -type f -name "*.sql" | sort -n); do
+    echo "\\echo $sql_script" >> $database_scope
+    cat $sql_script >> $database_scope
+    echo "" >> $database_scope
 done 2>/dev/null
-echo "" >> $rebuild_sql
-
-step_label="SCHEMAS SOURCE"
-display_step_header >> $rebuild_sql
-echo "INFO: Appending $step_label"
+echo "" >> $database_scope
+echo "-- implicit create schemas, in case they aren't explicitly declared in database folder" >> $database_scope
 for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
-    for sql_script in $(find $schema/source -type f -name "*.sql" | sort -n); do
-        echo "set search_path = \"$(basename $schema)\";" >> $rebuild_sql
-        echo "-- $sql_script" >> $rebuild_sql
-        cat $sql_script >> $rebuild_sql
-        echo "" >> $rebuild_sql
-        echo "" >> $rebuild_sql
-    done 2>/dev/null
-    echo "" >> $rebuild_sql
+    schema_lower_case=$( tr '[:upper:]' '[:lower:]' <<<"$(basename $schema)" )
+    if [ "$schema_lower_case" == "public" ]; then
+        echo "-- intentionally skipping public schema" >> $database_scope
+    else
+        echo "CREATE SCHEMA IF NOT EXISTS $(basename $schema);" >> $database_scope
+    fi
 done 2>/dev/null
-echo "" >> $rebuild_sql
+
+echo "INFO: SCHEMA SCOPE (SPECIAL INITIAL) - $special_initial_schema"
+display_step_header >> $special_initial_schema
+echo "-- processing schemas special folders" >> $special_initial_schema
+echo "SET client_min_messages TO ERROR;" >> $special_initial_schema
+echo "SET ROLE $product_owner;" >> $special_initial_schema
+for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
+    echo "SET SEARCH_PATH=$(basename $schema);" >>$special_initial_schema
+
+    # list of folders with DDL that must be run before general schema folder and run only once
+    declare -a folder_names=("domains" "types") 
+    for folder in "${folder_names[@]}"; do
+        step_label="$(basename $schema)/special/$folder"
+        display_step_header >> $special_initial_schema
+        for sql_script in $(find $schema/special/$folder -type f -name "*.sql" | sort -n); do
+            echo "\\echo $sql_script" >> $special_initial_schema
+            cat $sql_script >> $special_initial_schema
+            echo "" >> $special_initial_schema
+        done 2>/dev/null
+        echo "" >> $special_initial_schema
+    done 2>/dev/null
+    step_label="schemas/*/special/forward_declarations"
+    display_step_header >> $special_initial_schema
+    for sql_script in $(find $project_folder/schemas/*/special/forward_declarations -type f -name "*.sql" | sort -n); do
+        echo "\\echo $sql_script" >> $special_initial_schema
+        cat $sql_script >> $special_initial_schema
+        echo "" >> $special_initial_schema
+    done 2>/dev/null
+done 2>/dev/null
+
+step_label="SCHEMAS SCOPE (GENERAL MULTIPASS)"
+display_step_header >> $general_schema
+echo "INFO: Generating $step_label - $general_schema"
+echo "-- processing schemas folder" >> $general_schema
+echo "SET client_min_messages TO ERROR;" >> $general_schema
+echo "SET ROLE $product_owner;" >> $general_schema
+echo "SET search_path=sportball;" >>$general_schema
+for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
+    echo "set search_path=$(basename $schema);" >>$general_schema
+
+    for sql_script in $(find $schema/general -type f -name "*.sql" | sort -n); do
+            echo "\\echo $sql_script" >> $general_schema
+            cat $sql_script >> $general_schema
+            echo "" >> $general_schema
+    done 2>/dev/null
+    echo "" >> $general_schema
+
+done 2>/dev/null
+
+echo "INFO: SCHEMA SCOPE (SPECIAL FINAL) - $special_final_schema"
+display_step_header >> $special_final_schema
+echo "-- processing schemas special folders" >> $special_final_schema
+echo "SET client_min_messages TO ERROR;" >> $special_final_schema
+echo "SET ROLE $product_owner;" >> $special_final_schema
+for schema in $(find $project_folder/schemas -type d -maxdepth 1 -not -path $project_folder/schemas | sort -n); do
+    echo "SET SEARCH_PATH=$(basename $schema);" >>$special_final_schema
+    # list of folders with DDL that must be run after general schema folder and run only once
+    declare -a folder_names=("ref_constraints")
+    for folder in "${folder_names[@]}"; do
+        step_label="special/$folder"
+        display_step_header >> $special_final_schema
+
+        for sql_script in $(find $schema/special/$folder -type f -name "*.sql" | sort -n); do
+            echo "\\echo $sql_script" >> $special_final_schema
+            cat $sql_script >> $special_final_schema
+            echo "" >> $special_final_schema
+        done 2>/dev/null
+        echo "" >> $special_final_schema
+    done 2>/dev/null
+done 2>/dev/null
 
 step_label="BREAKDOWN TASKS"
-display_step_header >> $rebuild_sql
-echo "INFO: Appending $step_label"
+display_step_header >> $breakdown_tasks
+echo "INFO: Generating $step_label - $breakdown_tasks"
+echo "-- processing breakdown_tasks folder" >> $breakdown_tasks
+echo "SET client_min_messages TO ERROR;" >> $breakdown_tasks
+echo "SET ROLE $product_owner;" >>$breakdown_tasks 
 for sql_script in $(find $project_folder/breakdown_tasks -type f -name "*.sql" | sort -n); do
-    echo "-- $(basename $sql_script)" >> $rebuild_sql
-    cat $sql_script >> $rebuild_sql
-    echo "" >> $rebuild_sql
-    echo "" >> $rebuild_sql
+    echo "\\echo $sql_script" >> $breakdown_tasks
+    cat $sql_script >> $breakdown_tasks
+    echo "" >> $breakdown_tasks
 done 2>/dev/null
-echo "" >> $rebuild_sql
 
 step_label="TODO"
-display_step_header >> $rebuild_sql
-echo "INFO: Appending $step_label"
-echo "" >> $rebuild_sql
-echo "" >> $rebuild_sql
-echo "/*" >> $rebuild_sql
-grep -r -e "^--TODO" $project_folder --exclude-dir $output_folder | sed "s/${project_folder//\//\\/}/.../g" >> $rebuild_sql
-echo "*/" >> $rebuild_sql
+display_step_header >> $todo
+echo "INFO: Generating $step_label - $todo"
+grep -r -e "TODO" $project_folder --exclude-dir $output_folder | sed "s/${project_folder//\//\\/}/.../g" >> $todo
 
 echo "INFO: Generation complete"
 
 if [ "$execution_requested" == "true" ]; then
-    echo "INFO: Executing rebuild SQL"
+    echo "REQUESTED: Execute generated SQL"
     
-    #psql $conninfo --file=$rebuild_sql --log-file=$rebuild_log --output=/dev/null 2>$rebuild_error
-    psql $conninfo --file=$rebuild_sql --echo-queries >$rebuild_log 2>$rebuild_error
-    
-    if [ $? -ne 0 ]; then
-        echo "FATAL: psql ON_ERROR_STOP"
-        echo "ACTION: resolve ERROR and rerun"
+    echo "INFO: Executing $setup_tasks"
+    psql $conninfo -v ON_ERROR_STOP=1 --file=$setup_tasks --echo-queries >>$log 2>&1
+
+    echo "INFO: Executing $database_scope"
+    psql $conninfo -v ON_ERROR_STOP=1 --file=$database_scope --echo-queries >>$log 2>&1
+
+    echo "INFO: Executing $special_initial_schema"
+    psql $conninfo -v ON_ERROR_STOP=1 --file=$special_initial_schema --echo-queries >>$log 2>&1
+
+    if [ `grep "ERROR:" $log | wc -l` -gt 0 ]; then
         echo ""
-        cat $rebuild_error
-        exit 1
-    else
-        echo "INFO: Execution complete - $rebuild_log"
+            echo "..."
+            tail -10 $log
+            echo "..."
+            echo "FATAL: schema scope processing cannot resolve this ERROR"
+            echo "ACTION: review ERROR, resolve related source code, and rereun"
+            exit 1
     fi
+
+    echo "INFO: Executing $general_schema"
+
+    temp_log=$log.tmp
+    echo "" > $temp_log
+    declare -i passes=0
+    declare -i error_count=1000000
+    declare -i new_error_count=0
+    while [ $error_count -gt 0 ]; do
+        passes=$((passes+1));
+        psql $conninfo -v ON_ERROR_STOP=0 --file=$general_schema --echo-queries  >$temp_log 2>&1
+        new_error_count=`grep "ERROR:" $temp_log | wc -l`
+        echo "INFO: pass $passes - $new_error_count ERRORS"
+        if [ $new_error_count -eq $error_count ]; then
+            echo "(multipass error resolution stopped progressing)"
+            # there is no progress being made, time to stop on error and spit out log
+            psql $conninfo -v ON_ERROR_STOP=1 --file=$general_schema --echo-queries >$log 2>&1
+
+            echo "..."
+            tail -20 $log
+            echo "..."
+            echo "FATAL: schema scope processing cannot resolve this ERROR"
+            echo "ACTION: review ERROR, resolve related source code, and rereun"
+            rm $temp_log >/dev/null 2>&1
+            exit 1
+        else
+            error_count=`grep "ERROR:" $temp_log | wc -l`
+        fi
+    done
+    cat $temp_log >> $log
+    rm $temp_log >/dev/null 2>&1
+    if [ $passes -eq 1 ]; then
+        echo "INFO: AMAZING! $passes pass was required to succeed (then again there may be a defect)"
+    else
+        echo "INFO: $passes passes were required to succeed"
+        # TODO maybe make recommendation if passes is greater than a normal value
+    fi
+
+    echo "INFO: Executing $special_final_schema"
+    psql $conninfo -v ON_ERROR_STOP=1 --file=$special_final_schema --echo-queries >>$log 2>&1
+    
+    if [ `grep "ERROR:" $log | wc -l` -gt 0 ]; then
+        echo ""
+            echo "..."
+            tail -10 $log
+            echo "..."
+            echo "FATAL: schema scope processing cannot resolve this ERROR"
+            echo "ACTION: review ERROR, resolve related source code, and rereun"
+            exit 1
+    fi
+
 fi
 
-if [ "$execution_requested" == "true" ]; then
-    touch $rebuild_error >/dev/null 2>&1
-    
-    if [ `grep "ERROR:" $rebuild_error | wc -l` -gt 0 ]; then
-        echo "WARNING: Errors occurred"
-        echo "ACTION: Review NOTICEs and resolve ERRORs before rerunning"
-        echo ""
-        cat $rebuild_error
-    else
-        echo "INFO: Congratulations! No execution errors!"
-    fi
-fi
+cat $setup_tasks 
 
-echo "EXIT: Script complete - `date +%FT%T` ($(echo "$(date +%s.%N)-$script_start" | bc) seconds)"
+echo "EXIT: Script completed normally - `date +%FT%T` ($(echo "$(date +%s.%N)-$script_start" | bc) seconds)"
 exit 0
