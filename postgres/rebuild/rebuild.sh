@@ -349,22 +349,33 @@ if [ "$execution_requested" == "true" ]; then
     echo "REQUESTED: Execute generated SQL"
     
     echo "INFO: Executing $setup_tasks"
-    psql $conninfo -v ON_ERROR_STOP=1 --file=$setup_tasks --echo-queries >>$log 2>&1
+    psql $conninfo -v ON_ERROR_STOP=1 --file=$setup_tasks --echo-queries >>$log
+    if [ $? -eq 0 ]; then
+        cat $setup_tasks >> $rebuild_sql
+    else
+        echo "FATAL: output $(basename $setup_tasks) script did not succeed"
+        echo "ACTION: review ERROR, resolve related source code, and rereun"
+        exit 1
+    fi
 
     echo "INFO: Executing $database_scope"
-    psql $conninfo -v ON_ERROR_STOP=1 --file=$database_scope --echo-queries >>$log 2>&1
+    psql $conninfo -v ON_ERROR_STOP=1 --file=$database_scope --echo-queries >>$log
+    if [ $? -eq 0 ]; then
+        cat $database_scope >> $rebuild_sql
+    else
+        echo "FATAL: output $(basename $database_scope) script did not succeed"
+        echo "ACTION: review ERROR, resolve related source code, and rereun"
+        exit 1
+    fi
 
     echo "INFO: Executing $special_initial_schema"
-    psql $conninfo -v ON_ERROR_STOP=1 --file=$special_initial_schema --echo-queries >>$log 2>&1
-
-    if [ `grep "ERROR:" $log | wc -l` -gt 0 ]; then
-        echo ""
-            echo "..."
-            tail -10 $log
-            echo "..."
-            echo "FATAL: schema scope processing cannot resolve this ERROR"
-            echo "ACTION: review ERROR, resolve related source code, and rereun"
-            exit 1
+    psql $conninfo -v ON_ERROR_STOP=1 --file=$special_initial_schema --echo-queries >>$log
+    if [ $? -eq 0 ]; then
+        cat $special_initial_schema >> $rebuild_sql
+    else
+        echo "FATAL: output $(basename $special_initial_schema) script did not succeed"
+        echo "ACTION: review ERROR, resolve related source code, and rereun"
+        exit 1
     fi
 
     echo "INFO: Executing $general_schema"
@@ -382,44 +393,36 @@ if [ "$execution_requested" == "true" ]; then
         if [ $new_error_count -eq $error_count ]; then
             echo "(multipass error resolution stopped progressing)"
             # there is no progress being made, time to stop on error and spit out log
-            psql $conninfo -v ON_ERROR_STOP=1 --file=$general_schema --echo-queries >$log 2>&1
-
-            echo "..."
-            tail -20 $log
-            echo "..."
-            echo "FATAL: schema scope processing cannot resolve this ERROR"
+            psql $conninfo -v ON_ERROR_STOP=1 --file=$general_schema --echo-queries >$log
+            echo "FATAL: schema scope multipass processing cannot resolve this ERROR"
             echo "ACTION: review ERROR, resolve related source code, and rereun"
             rm $temp_log >/dev/null 2>&1
             exit 1
         else
             error_count=`grep "ERROR:" $temp_log | wc -l`
+            cat $general_schema >> $rebuild_sql
         fi
     done
     cat $temp_log >> $log
     rm $temp_log >/dev/null 2>&1
     if [ $passes -eq 1 ]; then
-        echo "INFO: AMAZING! $passes pass was required to succeed (then again there may be a defect)"
+        echo "INFO: AMAZING! Only one pass was required to succeed."
     else
-        echo "INFO: $passes passes were required to succeed"
-        # TODO maybe make recommendation if passes is greater than a normal value
+        echo "INFO: $passes passes were required to succeed. See README for suggestions to succeed in one pass."
+        # TODO maybe make recommendation(s) if passes is greater than one
     fi
 
     echo "INFO: Executing $special_final_schema"
-    psql $conninfo -v ON_ERROR_STOP=1 --file=$special_final_schema --echo-queries >>$log 2>&1
-    
-    if [ `grep "ERROR:" $log | wc -l` -gt 0 ]; then
-        echo ""
-            echo "..."
-            tail -10 $log
-            echo "..."
-            echo "FATAL: schema scope processing cannot resolve this ERROR"
-            echo "ACTION: review ERROR, resolve related source code, and rereun"
-            exit 1
+    psql $conninfo -v ON_ERROR_STOP=1 --file=$special_final_schema --echo-queries >>$log
+    if [ $? -eq 0 ]; then
+        cat $special_final_schema >> $rebuild_sql
+    else
+        echo "FATAL: output $(basename $special_final_schema) script did not succeed"
+        echo "ACTION: review ERROR, resolve related source code, and rereun"
+        exit 1
     fi
 
 fi
-
-cat $setup_tasks 
 
 echo "EXIT: Script completed normally - `date +%FT%T` ($(echo "$(date +%s.%N)-$script_start" | bc) seconds)"
 exit 0
