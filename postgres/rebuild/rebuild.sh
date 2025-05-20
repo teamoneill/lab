@@ -191,7 +191,6 @@ echo "REQUESTED: Generate rebuild SQL"
 
 # output baseline variables
 setup_tasks=$output_folder/setup_tasks.sql
-drop_schemas=$output_folder/drop_schemas.sql
 database_scope=$output_folder/database_scope.sql
 special_initial_schema=$output_folder/special_initial_schema.sql
 general_schema=$output_folder/general_schema.sql
@@ -203,7 +202,6 @@ log=$output_folder/rebuild.log
 
 # initialize output files
 echo "" > $setup_tasks
-echo "" > $drop_schemas
 echo "" > $database_scope
 echo "" > $special_initial_schema
 echo "" > $general_schema
