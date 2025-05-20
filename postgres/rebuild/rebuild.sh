@@ -209,7 +209,6 @@ echo "" > $special_initial_schema
 echo "" > $general_schema
 echo "" > $special_final_schema
 echo "" > $breakdown_tasks
-echo "" > $breakdown_tasks
 echo "" > $todo
 echo "" > $log
 
@@ -418,6 +417,16 @@ if [ "$execution_requested" == "true" ]; then
         cat $special_final_schema >> $rebuild_sql
     else
         echo "FATAL: output $(basename $special_final_schema) script did not succeed"
+        echo "ACTION: review ERROR, resolve related source code, and rereun"
+        exit 1
+    fi
+
+    echo "INFO: Executing $breakdown_tasks"
+    psql $conninfo -v ON_ERROR_STOP=1 --file=$breakdown_tasks --echo-queries >>$log
+    if [ $? -eq 0 ]; then
+        cat $breakdown_tasks >> $rebuild_sql
+    else
+        echo "FATAL: output $(basename $breakdown_tasks) script did not succeed"
         echo "ACTION: review ERROR, resolve related source code, and rereun"
         exit 1
     fi
