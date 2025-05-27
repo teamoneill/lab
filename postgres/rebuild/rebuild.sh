@@ -3,8 +3,6 @@
 script_start="$(date +%s.%N)"
 log_date=`date +%FT%T`
 
-echo "INFO: Script started - $log_date"
-
 display_fatal_error_default_action() {
     echo "ACTION: Display help (rebuild.sh --help) and/or review README.md5"
 }
@@ -49,9 +47,7 @@ SOFTWARE.
 display_help() {
     echo "
 Purpose:
-  This script generates the script file necessary to synchronize a
-  database from database project source control sandbox. If the conninfo
-  parameter is provided, the generated script is executed as well.
+  Synchronizes a developer "branch" database from source control sandbox.
 
 Usage:
   rebuild.sh {parameters}
@@ -65,14 +61,12 @@ Parameters:
 
   --project-folder={path}
       Location of database project source code. See README for guidance on structure expected.
-      Required for output.
       Must contain setup, breakdown, schemas folders.
 
   --output-folder={path}
       Location of generated SQL. Required for output.
 
   --conninfo={uri}
-      Execution of generated SQL is requested.
       Execute as the product owner.
 
 See README for more detailed guidance.
@@ -190,6 +184,7 @@ echo "" > $log
 echo "" > $todo
 
 if [ "$execution_requested" == "true" ]; then
+    echo "INFO: Script started - $log_date"
 
     echo -n "INFO: Executing setup folder..."
     for sql_script in $(find $project_folder/setup/*.sql -type f | sort -n); do
