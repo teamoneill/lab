@@ -8,4 +8,4 @@ Use cases:
 
 * CREATE ROLES/USERS statements
 * CREATE/ALTER DATABASE statements
-* Intra-database data migration/propagation logic
+* Inter-database data migration/propagation logic

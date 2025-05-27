@@ -1,3 +1,0 @@
-# IMPORTANT
-
-The rebuild package cannot process the public schema automatically. While use of the public schema is a bad practice, if you must, do so outside the project folder.
