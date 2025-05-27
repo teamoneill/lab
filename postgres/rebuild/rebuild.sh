@@ -13,7 +13,7 @@ display_fatal_error() {
 }
 
 display_version() {
-    echo "Team O'Neill Projects - Postgres Schema Rebuild (2025-10-26)"
+    echo "Team O'Neill Projects - Postgres Schema Rebuild (2025-05-26)"
 }
 
 display_copyright() {

@@ -1,7 +1,7 @@
 [Team O'Neill Projects](http://teamoneill.org)
 # [Postgres Database Project Rebuild](https://github.com/teamoneill/lab/tree/main/postgres/rebuild)
 
-**Version:** 2025-10-26
+**Version:** 2025-05-26
 
 **Purpose:** While rapidly developing changes in a branch database, this package completely synchronizes the database with your project's source control sandbox.
 
