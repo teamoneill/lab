@@ -1,5 +1,5 @@
 [Team O'Neill Projects](http://teamoneill.org)
-# [Postgres Database Project Rebuild](https://github.com/teamoneill/lab/tree/main/postgres/rebuild)
+# [Postgres Rebuild](https://github.com/teamoneill/lab/tree/main/postgres/rebuild)
 
 **Version:** 2025-05-26
 
